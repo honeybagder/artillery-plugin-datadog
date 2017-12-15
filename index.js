@@ -5,9 +5,13 @@ class DatadogPlugin {
   constructor(rawConfig, ee) {
     debug('Initializing Datadog...');
 
-    const config = {
-      flushIntervalSeconds: 0,
-    };
+    const config = {};
+    let flushOnStat = false;
+    config.flushIntervalSeconds = rawConfig.plugins.datadog.flushIntervalSeconds || 10;
+    if (config.flushIntervalSeconds < 0) {
+      config.flushIntervalSeconds = 0;
+      flushOnStat = true;
+    }
     config.host = rawConfig.plugins.datadog.host || '';
     config.prefix = rawConfig.plugins.datadog.prefix || 'artillery.';
     config.defaultTags = [`startTime:${new Date().toISOString()}`];
@@ -17,8 +21,10 @@ class DatadogPlugin {
 
     ee.on('stats', (stats) => {
       const report = stats.report();
-      debug(`Stats Report from Artillery: ${JSON.stringify(stats)}`);
-      const metrics = {
+      debug(`Report from Artillery: ${JSON.stringify(report)}`);
+
+      // response codes
+      const counters = {
         'scenarios.created': report.scenariosCreated,
         'scenarios.completed': report.scenariosCompleted,
         'requests.completed': report.requestsCompleted,
@@ -28,29 +34,20 @@ class DatadogPlugin {
         'response.5xx': 0,
       };
 
-      // response codes
       Object.keys(report.codes).forEach((key) => {
         const code = key;
         const count = report.codes[key];
-        metrics[`response.${code.charAt(0)}xx`] += count;
-        metrics[`response.${code}`] = count;
+        counters[`response.${code.charAt(0)}xx`] += count;
+        counters[`response.${code}`] = count;
       });
 
       // latencies
-      Object.keys(report.latency).forEach((key) => {
-        const type = key;
-        const value = report.latency[key];
-        if (value) {
-          metrics[`latency.${type}`] = value;
-        }
+      const histograms = {};
+      histograms.latency = [];
+      report.latencies.forEach((item) => {
+        const seconds = item[2] / 1000000;
+        histograms.latency.push(seconds);
       });
-
-      // percent of ok responses
-      metrics['response.ok_pct'] = () => {
-        const percentage = ((metrics['response.2xx'] + metrics['response.3xx']) * 100) / metrics['scenarios.completed'];
-        if (Number.isNaN(percentage)) return 0;
-        return Math.round(percentage * 100) / 100;
-      };
 
       // tags
       const tags = [];
@@ -58,10 +55,24 @@ class DatadogPlugin {
       tags.concat(rawConfig.plugins.datadog.tags);
 
       // hand the metrics over to the datadog client
-      Object.keys(metrics).forEach((key) => {
-        datadog.gauge(key, metrics[key], tags);
+      Object.keys(counters).forEach((key) => {
+        if (counters[key]) {
+          datadog.increment(key, counters[key], tags);
+        }
       });
 
+      Object.keys(histograms).forEach((key) => {
+        histograms[key].forEach((value) => {
+          datadog.histogram(key, value, tags);
+        });
+      });
+
+      if (flushOnStat) {
+        datadog.flush();
+      }
+    });
+
+    ee.on('done', () => {
       datadog.flush();
     });
   }
