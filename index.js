@@ -4,14 +4,15 @@ const debug = require('debug')('plugin:datadog');
 class DatadogPlugin {
   constructor(rawConfig, ee) {
     debug('Initializing Datadog...');
-    datadog.init(() => {
-      const config = {
-        flushIntervalSeconds: 0,
-      };
-      config.host = rawConfig.plugins.datadog.host || '';
-      config.prefix = rawConfig.plugins.datadog.prefix || 'artillery.';
-      return config;
-    });
+
+    const config = {
+      flushIntervalSeconds: 0,
+    };
+    config.host = rawConfig.plugins.datadog.host || '';
+    config.prefix = rawConfig.plugins.datadog.prefix || 'artillery.';
+    debug(`with config: ${JSON.stringify(config)}`);
+
+    datadog.init(config);
 
     ee.on('stats', (stats) => {
       const report = stats.report();
