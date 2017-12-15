@@ -10,6 +10,7 @@ class DatadogPlugin {
     };
     config.host = rawConfig.plugins.datadog.host || '';
     config.prefix = rawConfig.plugins.datadog.prefix || 'artillery.';
+    config.defaultTags = [`startTime:${new Date().toISOString()}`];
     debug(`with config: ${JSON.stringify(config)}`);
 
     datadog.init(config);
@@ -30,7 +31,7 @@ class DatadogPlugin {
       // response codes
       Object.keys(report.codes).forEach((key) => {
         const code = key;
-        const count = report.codes[key] || 0;
+        const count = report.codes[key];
         metrics[`response.${code.charAt(0)}xx`] += count;
         metrics[`response.${code}`] = count;
       });
@@ -39,17 +40,16 @@ class DatadogPlugin {
       Object.keys(report.latency).forEach((key) => {
         const type = key;
         const value = report.latency[key];
-        metrics[`latency.${type}`] = value;
+        if (value) {
+          metrics[`latency.${type}`] = value;
+        }
       });
 
       // percent of ok responses
       metrics['response.ok_pct'] = () => {
-        if (metrics['requests.completed']) {
-          const percentage = ((metrics['response.2xx'] + metrics['response.3xx']) * 100) / metrics['requests.completed'];
-          // two decimals is plenty
-          return Math.round(percentage * 100) / 100;
-        }
-        return null;
+        const percentage = ((metrics['response.2xx'] + metrics['response.3xx']) * 100) / metrics['scenarios.completed'];
+        if (Number.isNaN(percentage)) return 0;
+        return Math.round(percentage * 100) / 100;
       };
 
       // tags
@@ -61,15 +61,8 @@ class DatadogPlugin {
       Object.keys(metrics).forEach((key) => {
         datadog.gauge(key, metrics[key], tags);
       });
-    });
 
-    ee.on('done', () => {
-      debug('done');
-      // send the metrics to datatdog
-      datadog.flush(
-        () => { debug('Flushed metrics to Datadog'); },
-        () => { debug('Unable to send metrics to Datadog!'); },
-      );
+      datadog.flush();
     });
   }
 }
