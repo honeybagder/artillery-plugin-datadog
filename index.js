@@ -29,7 +29,7 @@ class DatadogPlugin {
       // response codes
       Object.keys(report.codes).forEach((key) => {
         const code = key;
-        const count = report.codes[key];
+        const count = report.codes[key] || 0;
         metrics[`response.${code.charAt(0)}xx`] += count;
         metrics[`response.${code}`] = count;
       });
@@ -43,14 +43,17 @@ class DatadogPlugin {
 
       // percent of ok responses
       metrics['response.ok_pct'] = () => {
-        const percentage = ((metrics['response.2xx'] + metrics['response.3xx']) * 100) / metrics['scenarios.completed'];
-        if (Number.isNaN(percentage)) return 0;
-        return Math.round(percentage * 100) / 100;
+        if (metrics['requests.completed']) {
+          const percentage = ((metrics['response.2xx'] + metrics['response.3xx']) * 100) / metrics['requests.completed'];
+          // two decimals is plenty
+          return Math.round(percentage * 100) / 100;
+        }
+        return null;
       };
 
       // tags
       const tags = [];
-      tags.push({ target: rawConfig.target });
+      tags.push(`target:${rawConfig.target}`);
       tags.concat(rawConfig.plugins.datadog.tags);
 
       // hand the metrics over to the datadog client
