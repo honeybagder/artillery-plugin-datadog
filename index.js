@@ -15,7 +15,11 @@ class DatadogPlugin {
     }
     config.host = rawConfig.plugins.datadog.host || '';
     config.prefix = rawConfig.plugins.datadog.prefix || 'artillery.';
-    config.defaultTags = [`startTime:${new Date().toISOString()}`];
+    // tags
+    config.defaultTags = rawConfig.plugins.datadog.tags || [];
+    config.defaultTags.push(`startTime:${new Date().toISOString()}`);
+    config.defaultTags.push(`target:${rawConfig.target}`);
+
     debug(`with config: ${JSON.stringify(config)}`);
 
     datadog.init(config);
@@ -50,21 +54,16 @@ class DatadogPlugin {
         histograms.latency.push(seconds);
       });
 
-      // tags
-      const tags = [];
-      tags.push(`target:${rawConfig.target}`);
-      tags.concat(rawConfig.plugins.datadog.tags);
-
       // hand the metrics over to the datadog client
       Object.keys(counters).forEach((key) => {
         if (counters[key]) {
-          datadog.increment(key, counters[key], tags);
+          datadog.increment(key, counters[key]);
         }
       });
 
       Object.keys(histograms).forEach((key) => {
         histograms[key].forEach((value) => {
-          datadog.histogram(key, value, tags);
+          datadog.histogram(key, value);
         });
       });
 
