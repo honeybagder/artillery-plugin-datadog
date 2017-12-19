@@ -4,6 +4,7 @@ const debug = require('debug')('plugin:datadog');
 class DatadogPlugin {
   constructor(rawConfig, ee) {
     debug('Initializing Datadog...');
+    debug(`rawConfig: ${JSON.stringify(rawConfig)}`);
 
     const config = {};
     let flushOnStat = false;
